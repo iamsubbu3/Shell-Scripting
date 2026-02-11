@@ -2,22 +2,21 @@
 set -e
 
 echo "================================================"
-echo " DevSecOps Tools Setup (2026 Ready)"
-echo " Jenkins | SonarQube | Trivy | Docker | Java 21"
+echo " DevSecOps Complete Setup (Final Stable Version)"
+echo " Jenkins | SonarQube | Trivy | Docker | AWS CLI | kubectl"
 echo "================================================"
 
 # -----------------------------
-# OS check (Ubuntu only)
+# Ensure Ubuntu
 # -----------------------------
 if ! command -v apt >/dev/null 2>&1; then
-  echo "ERROR: This script supports Ubuntu only"
+  echo "❌ This script supports Ubuntu only"
   exit 1
 fi
 
 # -----------------------------
-# Base dependencies
+# Update System
 # -----------------------------
-echo "Installing base dependencies..."
 sudo apt update -y
 sudo apt install -y \
   curl \
@@ -26,39 +25,54 @@ sudo apt install -y \
   ca-certificates \
   lsb-release \
   unzip \
-  apt-transport-https \
   software-properties-common
 
 # -----------------------------
-# Docker (official)
-# https://docs.docker.com/engine/install/ubuntu/
+# Install Docker (Official Repo)
 # -----------------------------
 if ! command -v docker >/dev/null 2>&1; then
   echo "Installing Docker..."
-  curl -fsSL https://get.docker.com | sudo sh
-  sudo usermod -aG docker ubuntu
-else
-  echo "Docker already installed"
+
+  sudo install -m 0755 -d /etc/apt/keyrings
+  curl -fsSL https://download.docker.com/linux/ubuntu/gpg \
+    | sudo gpg --dearmor -o /etc/apt/keyrings/docker.gpg
+
+  echo \
+  "deb [arch=$(dpkg --print-architecture) signed-by=/etc/apt/keyrings/docker.gpg] \
+  https://download.docker.com/linux/ubuntu \
+  $(lsb_release -cs) stable" \
+  | sudo tee /etc/apt/sources.list.d/docker.list > /dev/null
+
+  sudo apt update -y
+  sudo apt install -y docker-ce docker-ce-cli containerd.io
 fi
 
+sudo systemctl enable docker
+sudo systemctl start docker
+
 # -----------------------------
-# Java 21 (LTS)
+# Fix Docker Permissions
+# -----------------------------
+echo "Configuring Docker permissions..."
+
+ACTUAL_USER=${SUDO_USER:-$USER}
+sudo usermod -aG docker "$ACTUAL_USER"
+
+# -----------------------------
+# Install Java 21
 # -----------------------------
 if ! java -version 2>&1 | grep -q "21"; then
-  echo "Installing Java 21 (LTS)..."
-  sudo apt install -y openjdk-21-jre
-else
-  echo "Java 21 already installed"
+  echo "Installing Java 21..."
+  sudo apt install -y openjdk-21-jdk
 fi
 
 # -----------------------------
-# Jenkins (OFFICIAL – 2026 KEY)
-# https://www.jenkins.io/doc/book/installing/linux/
+# Install Jenkins
 # -----------------------------
-if ! systemctl list-units --type=service | grep -q jenkins; then
+if ! systemctl list-unit-files | grep -q jenkins.service; then
   echo "Installing Jenkins..."
 
-  curl -fsSL https://pkg.jenkins.io/debian-stable/jenkins.io-2026.key \
+  curl -fsSL https://pkg.jenkins.io/debian-stable/jenkins.io.key \
     | sudo tee /usr/share/keyrings/jenkins-keyring.asc > /dev/null
 
   echo deb [signed-by=/usr/share/keyrings/jenkins-keyring.asc] \
@@ -70,41 +84,47 @@ if ! systemctl list-units --type=service | grep -q jenkins; then
 
   sudo systemctl enable jenkins
   sudo systemctl start jenkins
-else
-  echo "Jenkins already installed"
+fi
+
+# Add Jenkins to Docker group
+if id "jenkins" &>/dev/null; then
+  sudo usermod -aG docker jenkins
+  sudo systemctl restart jenkins
 fi
 
 # -----------------------------
-# SonarQube (Official Docker Image – LTS)
-# https://docs.sonarsource.com/sonarqube/latest/setup/install-server/
+# Install AWS CLI v2
 # -----------------------------
-if ! docker ps -a --format '{{.Names}}' | grep -q "^sonarqube$"; then
-  echo "Installing SonarQube (Docker – LTS)..."
+if ! command -v aws >/dev/null 2>&1; then
+  echo "Installing AWS CLI v2..."
 
-  docker volume create sonarqube_data
-  docker volume create sonarqube_extensions
-  docker volume create sonarqube_logs
-
-  docker run -d \
-    --name sonarqube \
-    --restart unless-stopped \
-    -p 9000:9000 \
-    -v sonarqube_data:/opt/sonarqube/data \
-    -v sonarqube_extensions:/opt/sonarqube/extensions \
-    -v sonarqube_logs:/opt/sonarqube/logs \
-    sonarqube:lts
-else
-  echo "SonarQube already running"
+  curl -fsSL "https://awscli.amazonaws.com/awscli-exe-linux-x86_64.zip" -o "awscliv2.zip"
+  unzip -o awscliv2.zip
+  sudo ./aws/install
+  rm -rf aws awscliv2.zip
 fi
 
 # -----------------------------
-# Trivy (Official Aqua Security Repo)
-# https://aquasecurity.github.io/trivy/
+# Install kubectl
+# -----------------------------
+if ! command -v kubectl >/dev/null 2>&1; then
+  echo "Installing kubectl..."
+
+  KUBECTL_VERSION=$(curl -fsSL https://dl.k8s.io/release/stable.txt)
+
+  curl -LO "https://dl.k8s.io/release/${KUBECTL_VERSION}/bin/linux/amd64/kubectl"
+  sudo install -o root -g root -m 0755 kubectl /usr/local/bin/kubectl
+  rm kubectl
+fi
+
+# -----------------------------
+# Install Trivy
 # -----------------------------
 if ! command -v trivy >/dev/null 2>&1; then
   echo "Installing Trivy..."
 
   sudo mkdir -p /etc/apt/keyrings
+
   curl -fsSL https://aquasecurity.github.io/trivy-repo/deb/public.key \
     | sudo tee /etc/apt/keyrings/trivy.asc > /dev/null
 
@@ -115,12 +135,37 @@ if ! command -v trivy >/dev/null 2>&1; then
 
   sudo apt update -y
   sudo apt install -y trivy
-else
-  echo "Trivy already installed"
 fi
 
 # -----------------------------
-# Versions & Access Info
+# Install SonarQube (Docker LTS)
+# -----------------------------
+if ! sudo docker ps -a --format '{{.Names}}' | grep -q "^sonarqube$"; then
+  echo "Installing SonarQube..."
+
+  sudo docker volume create sonarqube_data
+  sudo docker volume create sonarqube_extensions
+  sudo docker volume create sonarqube_logs
+
+  sudo docker run -d \
+    --name sonarqube \
+    --restart unless-stopped \
+    -p 9000:9000 \
+    -e SONAR_ES_BOOTSTRAP_CHECKS_DISABLE=true \
+    -v sonarqube_data:/opt/sonarqube/data \
+    -v sonarqube_extensions:/opt/sonarqube/extensions \
+    -v sonarqube_logs:/opt/sonarqube/logs \
+    sonarqube:lts
+fi
+
+# -----------------------------
+# Final Restart (Safety)
+# -----------------------------
+sudo systemctl restart docker
+sudo systemctl restart jenkins
+
+# -----------------------------
+# Display Installed Versions
 # -----------------------------
 echo
 echo "================================================"
@@ -128,6 +173,8 @@ echo " Installed Versions "
 echo "================================================"
 docker --version
 java -version
+aws --version
+kubectl version --client
 trivy --version
 jenkins --version || true
 
@@ -144,6 +191,9 @@ sudo cat /var/lib/jenkins/secrets/initialAdminPassword || true
 
 echo
 echo "================================================"
-echo " Installation Completed Successfully ✅ "
-echo " Logout & login again for Docker access "
+echo " Setup Completed Successfully ✅"
+echo "================================================"
+echo " IMPORTANT:"
+echo " 1. Logout & login again to use docker without sudo"
+echo " 2. Jenkins has been restarted"
 echo "================================================"
