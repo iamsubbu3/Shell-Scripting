@@ -1,0 +1,11 @@
+service:
+  type: ClusterIP
+
+nodeSelector:
+  role: monitoring
+
+tolerations:
+  - key: monitoring
+    operator: Equal
+    value: "true"
+    effect: NoSchedule

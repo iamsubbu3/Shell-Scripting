@@ -23,7 +23,7 @@ vpc:
         id: subnet-ddd444     # <-- Replace with your public subnet
 
 managedNodeGroups:
-  - name: k8s-ng
+  - name: app-ng
     instanceType: t3.large
     desiredCapacity: 3
     minSize: 2
@@ -31,6 +31,14 @@ managedNodeGroups:
     volumeSize: 50
     volumeType: gp3
     privateNetworking: true
+
+  - name: monitoring-ng
+    instanceType: t3.large
+    desiredCapacity: 2
+    volumeSize: 50
+    volumeType: gp3
+    labels:
+      role: monitoring
 
 
 # -----------------------------
