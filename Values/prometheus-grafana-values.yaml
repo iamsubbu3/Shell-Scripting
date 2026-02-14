@@ -28,3 +28,21 @@ alertmanager:
         operator: Equal
         value: "true"
         effect: NoSchedule
+
+# ⭐ ADD THIS
+prometheusOperator:
+  nodeSelector:
+    role: monitoring
+  tolerations:
+    - key: monitoring
+      operator: Equal
+      value: "true"
+      effect: NoSchedule
+
+# ⭐ ADD THIS
+nodeExporter:
+  tolerations:
+    - key: monitoring
+      operator: Equal
+      value: "true"
+      effect: NoSchedule

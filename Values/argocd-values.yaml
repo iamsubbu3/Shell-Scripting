@@ -1,37 +1,32 @@
+# ---------------------------------------------------
+# Global defaults (applies to all components)
+# ---------------------------------------------------
+global:
+  nodeSelector:
+    role: monitoring
+
+  tolerations:
+    - key: monitoring
+      operator: Equal
+      value: "true"
+      effect: NoSchedule
+
+# ---------------------------------------------------
+# ArgoCD Server
+# ---------------------------------------------------
 server:
   service:
     type: ClusterIP
-  nodeSelector:
-    role: monitoring
-  tolerations:
-    - key: monitoring
-      operator: Equal
-      value: "true"
-      effect: NoSchedule
 
-repoServer:
-  nodeSelector:
-    role: monitoring
-  tolerations:
-    - key: monitoring
-      operator: Equal
-      value: "true"
-      effect: NoSchedule
+# ---------------------------------------------------
+# Core Components
+# ---------------------------------------------------
+repoServer: {}
+controller: {}
+applicationSet: {}
 
-controller:
-  nodeSelector:
-    role: monitoring
-  tolerations:
-    - key: monitoring
-      operator: Equal
-      value: "true"
-      effect: NoSchedule
-
-applicationSet:
-  nodeSelector:
-    role: monitoring
-  tolerations:
-    - key: monitoring
-      operator: Equal
-      value: "true"
-      effect: NoSchedule
+# ---------------------------------------------------
+# REQUIRED extras (production)
+# ---------------------------------------------------
+redis: {}
+dex: {}

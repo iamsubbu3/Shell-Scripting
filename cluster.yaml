@@ -1,28 +1,56 @@
 apiVersion: eksctl.io/v1alpha5
 kind: ClusterConfig
 
+# =====================================================
+# 1️⃣ Cluster Metadata
+# =====================================================
 metadata:
   name: subbu-cluster
   region: us-east-1
-  version: "1.35"
+  version: "1.34"
 
+# =====================================================
+# 2️⃣ Existing VPC Configuration
+# =====================================================
 vpc:
-  id: vpc-0abc123456789xyz   # <-- Replace with your VPC ID
+  id: vpc-0abc123456789xyz   # <-- Replace with YOUR VPC ID
 
   subnets:
     private:
       us-east-1a:
-        id: subnet-aaa111     # <-- Replace with your private subnet
+        id: subnet-aaa111     # <-- Private subnet A
       us-east-1b:
-        id: subnet-bbb222     # <-- Replace with your private subnet
+        id: subnet-bbb222     # <-- Private subnet B
 
     public:
       us-east-1a:
-        id: subnet-ccc333     # <-- Replace with your public subnet
+        id: subnet-ccc333     # <-- Public subnet A
       us-east-1b:
-        id: subnet-ddd444     # <-- Replace with your public subnet
+        id: subnet-ddd444     # <-- Public subnet B
 
+# =====================================================
+# 3️⃣ IAM & OIDC (Required for IRSA)
+# =====================================================
+iam:
+  withOIDC: true
+
+# =====================================================
+# 4️⃣ EKS Addons
+# =====================================================
+addons:
+  - name: aws-ebs-csi-driver
+    version: latest
+    attachPolicyARNs:
+      - arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy
+
+# =====================================================
+# 5️⃣ Managed Node Groups
+# =====================================================
 managedNodeGroups:
+
+  # ---------------------------------------------------
+  # 🟢 Application Node Group
+  # ---------------------------------------------------
   - name: app-ng
     instanceType: t3.large
     desiredCapacity: 3
@@ -32,13 +60,36 @@ managedNodeGroups:
     volumeType: gp3
     privateNetworking: true
 
+    labels:
+      role: app
+
+    tags:
+      environment: production
+
+  # ---------------------------------------------------
+  # 🟣 Monitoring Node Group
+  # ---------------------------------------------------
   - name: monitoring-ng
     instanceType: t3.large
     desiredCapacity: 2
+    minSize: 2
+    maxSize: 4
     volumeSize: 50
     volumeType: gp3
+    privateNetworking: true
+    
     labels:
       role: monitoring
+
+    taints:
+      - key: monitoring
+        value: "true"
+        effect: NoSchedule
+
+    tags:
+      environment: production
+
+
 
 
 # -----------------------------

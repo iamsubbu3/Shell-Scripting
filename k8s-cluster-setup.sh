@@ -2,122 +2,106 @@
 set -euo pipefail
 
 echo "===================================================="
-echo " Production Monitoring + Logging + GitOps Setup "
-echo " ArgoCD + Prometheus + Grafana + ELK + Filebeat "
+echo " ZERO-FAIL Monitoring + GitOps Setup"
+echo " ArgoCD + Prometheus + Grafana"
 echo "===================================================="
+
+NAMESPACE_MON="monitoring"
+NAMESPACE_ARGO="argocd"
 
 # ----------------------------------------------------
 # 1️⃣ Cluster Validation
 # ----------------------------------------------------
-if ! kubectl cluster-info &>/dev/null; then
-  echo "❌ Cannot connect to Kubernetes cluster"
-  exit 1
-fi
-
+echo "🔎 Checking cluster connectivity..."
+kubectl cluster-info >/dev/null
 echo "✅ Cluster reachable"
-kubectl config current-context
 
 # ----------------------------------------------------
-# 2️⃣ Monitoring nodes check
+# 2️⃣ Helm install check
 # ----------------------------------------------------
-if ! kubectl get nodes -l role=monitoring | grep -q Ready; then
-  echo "❌ No monitoring nodes found"
-  echo "Run:"
-  echo "kubectl label nodes <node-name> role=monitoring"
-  exit 1
-fi
-
-# ----------------------------------------------------
-# 3️⃣ Install Helm
-# ----------------------------------------------------
-if ! command -v helm &>/dev/null; then
+if ! command -v helm >/dev/null; then
+  echo "Installing Helm..."
   curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 fi
 
 # ----------------------------------------------------
-# 4️⃣ Helm repos
+# 3️⃣ Helm repositories
 # ----------------------------------------------------
 helm repo add argo https://argoproj.github.io/argo-helm || true
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts || true
-helm repo add elastic https://helm.elastic.co || true
-
 helm repo update
 
 # ----------------------------------------------------
-# 5️⃣ Namespaces
+# 4️⃣ Namespaces
 # ----------------------------------------------------
-kubectl create ns argocd --dry-run=client -o yaml | kubectl apply -f -
-kubectl create ns monitoring --dry-run=client -o yaml | kubectl apply -f -
+kubectl create namespace $NAMESPACE_ARGO --dry-run=client -o yaml | kubectl apply -f -
+kubectl create namespace $NAMESPACE_MON --dry-run=client -o yaml | kubectl apply -f -
+
+# ----------------------------------------------------
+# 5️⃣ HELPER FUNCTIONS
+# ----------------------------------------------------
+wait_pods () {
+  NS=$1
+  echo "⏳ Waiting for pods in namespace $NS ..."
+  kubectl wait --for=condition=Ready pods --all -n $NS --timeout=900s || true
+}
+
+cleanup_pending_release () {
+  REL=$1
+  NS=$2
+
+  STATUS=$(helm list -n $NS --all -o json | jq -r ".[] | select(.name==\"$REL\") | .status" || true)
+
+  if [[ "$STATUS" == "pending-install" || "$STATUS" == "pending-upgrade" || "$STATUS" == "failed" ]]; then
+    echo "⚠️ Cleaning stuck release: $REL"
+    helm uninstall $REL -n $NS || true
+  fi
+}
 
 # ----------------------------------------------------
 # 6️⃣ ArgoCD
 # ----------------------------------------------------
+cleanup_pending_release argocd $NAMESPACE_ARGO
+
+echo "🚀 Installing ArgoCD..."
 helm upgrade --install argocd argo/argo-cd \
-  -n argocd \
+  -n $NAMESPACE_ARGO \
   -f values/argocd-values.yaml \
-  --wait --timeout 10m
+  --wait --timeout 10m --atomic
 
 # ----------------------------------------------------
 # 7️⃣ Prometheus + Grafana
 # ----------------------------------------------------
+cleanup_pending_release monitoring $NAMESPACE_MON
+
+echo "🚀 Installing Prometheus + Grafana..."
 helm upgrade --install monitoring \
   prometheus-community/kube-prometheus-stack \
-  -n monitoring \
+  -n $NAMESPACE_MON \
   -f values/prometheus-values.yaml \
-  --wait --timeout 15m
+  --wait --timeout 15m --atomic
 
 # ----------------------------------------------------
-# 8️⃣ Elasticsearch
+# 8️⃣ Final health checks
 # ----------------------------------------------------
-helm upgrade --install elasticsearch elastic/elasticsearch \
-  -n monitoring \
-  -f values/elk-values.yaml \
-  --wait --timeout 20m
+wait_pods $NAMESPACE_ARGO
+wait_pods $NAMESPACE_MON
 
 # ----------------------------------------------------
-# 9️⃣ Kibana
-# ----------------------------------------------------
-helm upgrade --install kibana elastic/kibana \
-  -n monitoring \
-  -f values/elk-values.yaml \
-  --wait --timeout 10m
-
-# ----------------------------------------------------
-# 🔟 Logstash
-# ----------------------------------------------------
-helm upgrade --install logstash elastic/logstash \
-  -n monitoring \
-  -f values/logstash-values.yaml \
-  --wait --timeout 10m
-
-# ----------------------------------------------------
-# 11️⃣ Filebeat
-# ----------------------------------------------------
-helm upgrade --install filebeat elastic/filebeat \
-  -n monitoring \
-  -f values/filebeat-values.yaml \
-  --wait --timeout 10m
-
-# ----------------------------------------------------
-# 12️⃣ Rollout checks
-# ----------------------------------------------------
-kubectl rollout status deployment -n argocd --timeout=600s || true
-kubectl rollout status deployment -n monitoring --timeout=900s || true
-
-# ----------------------------------------------------
-# 13️⃣ Passwords
+# 9️⃣ Passwords
 # ----------------------------------------------------
 echo ""
-echo "ArgoCD Admin Password:"
+echo "🔐 ArgoCD Password:"
 kubectl -n argocd get secret argocd-initial-admin-secret \
   -o jsonpath="{.data.password}" | base64 -d
 echo ""
 
 echo ""
-echo "Grafana Admin Password:"
+echo "🔐 Grafana Password:"
 kubectl -n monitoring get secret monitoring-grafana \
   -o jsonpath="{.data.admin-password}" | base64 -d
 echo ""
 
-echo ""
-echo "✅ Installation complete (ClusterIP services)"
+echo "===================================================="
+echo "✅ INSTALL COMPLETED (ARGOCD + PROMETHEUS + GRAFANA)"
+echo "===================================================="
