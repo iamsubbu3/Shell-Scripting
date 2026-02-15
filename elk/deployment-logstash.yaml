@@ -1,0 +1,48 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: logstash
+  namespace: observability
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: logstash
+
+  template:
+    metadata:
+      labels:
+        app: logstash
+    spec:
+      nodeSelector:
+        role: monitoring
+
+      tolerations:
+      - key: monitoring
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
+
+      containers:
+      - name: logstash
+        image: docker.elastic.co/logstash/logstash:8.11.0
+
+        ports:
+        - containerPort: 5044
+
+        resources:
+          requests:
+            cpu: 200m
+            memory: 512Mi
+          limits:
+            cpu: "1"
+            memory: 1Gi
+
+        volumeMounts:
+        - name: config-volume
+          mountPath: /usr/share/logstash/pipeline
+
+      volumes:
+      - name: config-volume
+        configMap:
+          name: logstash-config

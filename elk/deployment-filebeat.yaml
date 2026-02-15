@@ -1,0 +1,58 @@
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: filebeat
+  namespace: observability
+spec:
+  selector:
+    matchLabels:
+      app: filebeat
+
+  template:
+    metadata:
+      labels:
+        app: filebeat
+    spec:
+
+      # ✅ run on ALL nodes including tainted monitoring nodes
+      tolerations:
+      - operator: Exists
+
+      containers:
+      - name: filebeat
+        image: docker.elastic.co/beats/filebeat:8.11.0
+        args: ["-c", "/etc/filebeat.yml", "-e"]
+
+        resources:
+          requests:
+            cpu: 100m
+            memory: 200Mi
+          limits:
+            cpu: 300m
+            memory: 400Mi
+
+        volumeMounts:
+        - name: config
+          mountPath: /etc/filebeat.yml
+          subPath: filebeat.yml
+
+        - name: varlogcontainers
+          mountPath: /var/log/containers
+          readOnly: true
+
+        - name: varlogpods
+          mountPath: /var/log/pods
+          readOnly: true
+
+      volumes:
+      - name: config
+        configMap:
+          name: filebeat-config
+
+      - name: varlogcontainers
+        hostPath:
+          path: /var/log/containers
+
+      - name: varlogpods
+        hostPath:
+          path: /var/log/pods

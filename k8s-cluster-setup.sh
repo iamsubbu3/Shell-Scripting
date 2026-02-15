@@ -2,8 +2,8 @@
 set -euo pipefail
 
 echo "===================================================="
-echo " ZERO-FAIL Monitoring + GitOps Setup"
-echo " ArgoCD + Prometheus + Grafana"
+echo " ZERO-FAIL Monitoring + GitOps + ELK Setup"
+echo " ArgoCD + Prometheus + Grafana + ELK"
 echo "===================================================="
 
 NAMESPACE_MON="monitoring"
@@ -22,6 +22,12 @@ echo "✅ Cluster reachable"
 if ! command -v helm >/dev/null; then
   echo "Installing Helm..."
   curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
+fi
+
+# jq needed for release cleanup
+if ! command -v jq >/dev/null; then
+  echo "Installing jq..."
+  apt-get update && apt-get install -y jq
 fi
 
 # ----------------------------------------------------
@@ -82,13 +88,32 @@ helm upgrade --install monitoring \
   --wait --timeout 15m --atomic
 
 # ----------------------------------------------------
-# 8️⃣ Final health checks
+# 8️⃣ ELK STACK (YAML APPLY)
+# ----------------------------------------------------
+echo "🚀 Applying ELK Stack manifests..."
+
+kubectl apply -f elk/namespace.yaml
+kubectl apply -f elk/deployment-elasticsearch.yaml
+kubectl apply -f elk/svc-elasticsearch.yaml
+kubectl apply -f elk/deployment-kibana.yaml
+kubectl apply -f elk/svc-kibana.yaml
+kubectl apply -f elk/configmap-logstash.yaml
+kubectl apply -f elk/deployment-logstash.yaml
+kubectl apply -f elk/svc-logstash.yaml
+kubectl apply -f elk/configmap-filebeat.yaml
+kubectl apply -f elk/deployment-filebeat.yaml
+
+echo "✅ ELK manifests applied"
+
+# ----------------------------------------------------
+# 9️⃣ Final health checks
 # ----------------------------------------------------
 wait_pods $NAMESPACE_ARGO
 wait_pods $NAMESPACE_MON
+wait_pods observability
 
 # ----------------------------------------------------
-# 9️⃣ Passwords
+# 🔟 Passwords
 # ----------------------------------------------------
 echo ""
 echo "🔐 ArgoCD Password:"
@@ -103,5 +128,6 @@ kubectl -n monitoring get secret monitoring-grafana \
 echo ""
 
 echo "===================================================="
-echo "✅ INSTALL COMPLETED (ARGOCD + PROMETHEUS + GRAFANA)"
+echo "✅ INSTALL COMPLETED"
+echo " ArgoCD + Prometheus + Grafana + ELK"
 echo "===================================================="
