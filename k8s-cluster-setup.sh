@@ -70,18 +70,30 @@ cleanup_pending_release () {
   fi
 }
 
-# Auto-detect ALL LoadBalancer services
+# Auto-detect ALL LoadBalancer services (WITH PORTS)
 print_loadbalancers () {
   echo ""
   echo "🌐 External LoadBalancer Endpoints"
-  echo "----------------------------------------------"
+  echo "-------------------------------------------------------------"
+  printf "%-15s %-35s %-45s %-10s\n" "NAMESPACE" "SERVICE" "EXTERNAL-IP" "PORT"
+  echo "-------------------------------------------------------------"
 
   kubectl get svc -A \
     --field-selector spec.type=LoadBalancer \
-    -o custom-columns="NAMESPACE:.metadata.namespace,NAME:.metadata.name,EXTERNAL-IP:.status.loadBalancer.ingress[0].hostname" \
-    | awk 'NR==1 || $3 != ""'
+    -o json | jq -r '
+    .items[] |
+    select(.status.loadBalancer.ingress[0].hostname != null or .status.loadBalancer.ingress[0].ip != null) |
+    [
+      .metadata.namespace,
+      .metadata.name,
+      (.status.loadBalancer.ingress[0].hostname // .status.loadBalancer.ingress[0].ip),
+      (.spec.ports[0].port | tostring)
+    ] | @tsv' | while IFS=$'\t' read -r ns name host port; do
+      printf "%-15s %-35s %-45s %-10s\n" "$ns" "$name" "$host" "$port"
+      echo "  ↳ URL: http://$host:$port"
+    done
 
-  echo "----------------------------------------------"
+  echo "-------------------------------------------------------------"
 }
 
 # ----------------------------------------------------
@@ -148,7 +160,7 @@ kubectl -n monitoring get secret monitoring-grafana \
 echo ""
 
 # ----------------------------------------------------
-# 1️⃣1️⃣ Show LoadBalancer URLs
+# 1️⃣1️⃣ Show LoadBalancer URLs + Ports
 # ----------------------------------------------------
 print_loadbalancers
 
