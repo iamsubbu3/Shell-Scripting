@@ -84,7 +84,7 @@ echo "🚀 Installing Prometheus + Grafana..."
 helm upgrade --install monitoring \
   prometheus-community/kube-prometheus-stack \
   -n $NAMESPACE_MON \
-  -f values/prometheus-values.yaml \
+  -f values/prometheus-grafana-values.yaml \
   --wait --timeout 15m --atomic
 
 # ----------------------------------------------------
@@ -93,6 +93,7 @@ helm upgrade --install monitoring \
 echo "🚀 Applying ELK Stack manifests..."
 
 kubectl apply -f elk/namespace.yaml
+# kubectl apply -f storageclass-gp3.yaml
 kubectl apply -f elk/deployment-elasticsearch.yaml
 kubectl apply -f elk/svc-elasticsearch.yaml
 kubectl apply -f elk/deployment-kibana.yaml

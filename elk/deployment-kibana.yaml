@@ -5,6 +5,7 @@ metadata:
   namespace: observability
 spec:
   replicas: 1
+
   selector:
     matchLabels:
       app: kibana
@@ -13,45 +14,60 @@ spec:
     metadata:
       labels:
         app: kibana
+
     spec:
       nodeSelector:
         role: monitoring
 
       tolerations:
-      - key: monitoring
-        operator: Equal
-        value: "true"
-        effect: NoSchedule
+        - key: monitoring
+          operator: Equal
+          value: "true"
+          effect: NoSchedule
 
       containers:
-      - name: kibana
-        image: docker.elastic.co/kibana/kibana:8.11.0
+        - name: kibana
+          image: docker.elastic.co/kibana/kibana:8.11.0
 
-        env:
-        - name: ELASTICSEARCH_HOSTS
-          value: "http://elasticsearch:9200"
+          env:
+            - name: ELASTICSEARCH_HOSTS
+              value: "http://elasticsearch:9200"
 
-        ports:
-        - containerPort: 5601
+          ports:
+            - containerPort: 5601
 
-        resources:
-          requests:
-            cpu: 200m
-            memory: 512Mi
-          limits:
-            cpu: 500m
-            memory: 1Gi
+          resources:
+            requests:
+              cpu: 200m
+              memory: 512Mi
+            limits:
+              cpu: 500m
+              memory: 1Gi
 
-        readinessProbe:
-          httpGet:
-            path: /api/status
-            port: 5601
-          initialDelaySeconds: 40
-          periodSeconds: 10
+          # ---------------------------------------------------
+          # 🚀 VERY IMPORTANT (prevents CrashLoopBackOff)
+          # ---------------------------------------------------
+          startupProbe:
+            httpGet:
+              path: /api/status
+              port: 5601
+            failureThreshold: 60
+            periodSeconds: 10
+            timeoutSeconds: 5
 
-        livenessProbe:
-          httpGet:
-            path: /api/status
-            port: 5601
-          initialDelaySeconds: 60
-          periodSeconds: 20
+          readinessProbe:
+            httpGet:
+              path: /api/status
+              port: 5601
+            initialDelaySeconds: 10
+            periodSeconds: 10
+            timeoutSeconds: 5
+            failureThreshold: 6
+
+          livenessProbe:
+            httpGet:
+              path: /api/status
+              port: 5601
+            initialDelaySeconds: 120
+            periodSeconds: 20
+            timeoutSeconds: 5

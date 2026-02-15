@@ -16,8 +16,21 @@ spec:
       labels:
         app: elasticsearch
     spec:
-      nodeSelector:
-        role: monitoring
+      terminationGracePeriodSeconds: 120
+
+      securityContext:
+        fsGroup: 1000
+
+      # 🔥 Better scheduling than only nodeSelector
+      affinity:
+        nodeAffinity:
+          requiredDuringSchedulingIgnoredDuringExecution:
+            nodeSelectorTerms:
+              - matchExpressions:
+                  - key: role
+                    operator: In
+                    values:
+                      - monitoring
 
       tolerations:
       - key: monitoring
@@ -53,11 +66,19 @@ spec:
         - name: elasticsearch-storage
           mountPath: /usr/share/elasticsearch/data
 
+        # 🔥 STARTUP PROBE (VERY IMPORTANT)
+        startupProbe:
+          httpGet:
+            path: /
+            port: 9200
+          failureThreshold: 60
+          periodSeconds: 10
+
         readinessProbe:
           httpGet:
             path: /
             port: 9200
-          initialDelaySeconds: 30
+          initialDelaySeconds: 20
           periodSeconds: 10
 
         livenessProbe:
@@ -72,7 +93,8 @@ spec:
       name: elasticsearch-storage
     spec:
       accessModes: ["ReadWriteOnce"]
-      storageClassName: gp3
+      storageClassName: gp2
+      volumeMode: Filesystem
       resources:
         requests:
           storage: 20Gi
