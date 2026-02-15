@@ -16,7 +16,7 @@ global:
 # ---------------------------------------------------
 server:
   service:
-    type: Loadbalancer
+    type: LoadBalancer
 
 # ---------------------------------------------------
 # Core Components

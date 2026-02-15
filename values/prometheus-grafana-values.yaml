@@ -1,6 +1,6 @@
 grafana:
   service:
-    type: Loadbalancer
+    type: LoadBalancer
   nodeSelector:
     role: monitoring
   tolerations:
@@ -11,7 +11,7 @@ grafana:
 
 prometheus:
   service:
-    type: Loadbalancer
+    type: LoadBalancer
   prometheusSpec:
     nodeSelector:
       role: monitoring

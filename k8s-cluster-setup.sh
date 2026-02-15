@@ -1,13 +1,17 @@
 #!/bin/bash
 set -euo pipefail
 
-echo "===================================================="
-echo " ZERO-FAIL Monitoring + GitOps + ELK Setup"
-echo " ArgoCD + Prometheus + Grafana + ELK"
-echo "===================================================="
+# ====================================================
+# ZERO-FAIL Monitoring + GitOps + ELK Setup
+# ArgoCD + Prometheus + Grafana + ELK
+# ====================================================
 
 NAMESPACE_MON="monitoring"
 NAMESPACE_ARGO="argocd"
+
+echo "===================================================="
+echo " Starting Platform Installation..."
+echo "===================================================="
 
 # ----------------------------------------------------
 # 1️⃣ Cluster Validation
@@ -17,22 +21,22 @@ kubectl cluster-info >/dev/null
 echo "✅ Cluster reachable"
 
 # ----------------------------------------------------
-# 2️⃣ Helm install check
+# 2️⃣ Install Required Tools
 # ----------------------------------------------------
 if ! command -v helm >/dev/null; then
-  echo "Installing Helm..."
+  echo "📦 Installing Helm..."
   curl -fsSL https://raw.githubusercontent.com/helm/helm/main/scripts/get-helm-3 | bash
 fi
 
-# jq needed for release cleanup
 if ! command -v jq >/dev/null; then
-  echo "Installing jq..."
+  echo "📦 Installing jq..."
   apt-get update && apt-get install -y jq
 fi
 
 # ----------------------------------------------------
-# 3️⃣ Helm repositories
+# 3️⃣ Helm Repositories
 # ----------------------------------------------------
+echo "📦 Adding Helm repositories..."
 helm repo add argo https://argoproj.github.io/argo-helm || true
 helm repo add prometheus-community https://prometheus-community.github.io/helm-charts || true
 helm repo update
@@ -40,15 +44,17 @@ helm repo update
 # ----------------------------------------------------
 # 4️⃣ Namespaces
 # ----------------------------------------------------
+echo "📂 Creating namespaces if missing..."
 kubectl create namespace $NAMESPACE_ARGO --dry-run=client -o yaml | kubectl apply -f -
 kubectl create namespace $NAMESPACE_MON --dry-run=client -o yaml | kubectl apply -f -
 
 # ----------------------------------------------------
-# 5️⃣ HELPER FUNCTIONS
+# 5️⃣ Helper Functions
 # ----------------------------------------------------
+
 wait_pods () {
   NS=$1
-  echo "⏳ Waiting for pods in namespace $NS ..."
+  echo "⏳ Waiting for pods in namespace: $NS"
   kubectl wait --for=condition=Ready pods --all -n $NS --timeout=900s || true
 }
 
@@ -64,8 +70,22 @@ cleanup_pending_release () {
   fi
 }
 
+# Auto-detect ALL LoadBalancer services
+print_loadbalancers () {
+  echo ""
+  echo "🌐 External LoadBalancer Endpoints"
+  echo "----------------------------------------------"
+
+  kubectl get svc -A \
+    --field-selector spec.type=LoadBalancer \
+    -o custom-columns="NAMESPACE:.metadata.namespace,NAME:.metadata.name,EXTERNAL-IP:.status.loadBalancer.ingress[0].hostname" \
+    | awk 'NR==1 || $3 != ""'
+
+  echo "----------------------------------------------"
+}
+
 # ----------------------------------------------------
-# 6️⃣ ArgoCD
+# 6️⃣ Install ArgoCD
 # ----------------------------------------------------
 cleanup_pending_release argocd $NAMESPACE_ARGO
 
@@ -76,7 +96,7 @@ helm upgrade --install argocd argo/argo-cd \
   --wait --timeout 10m --atomic
 
 # ----------------------------------------------------
-# 7️⃣ Prometheus + Grafana
+# 7️⃣ Install Prometheus + Grafana
 # ----------------------------------------------------
 cleanup_pending_release monitoring $NAMESPACE_MON
 
@@ -88,12 +108,11 @@ helm upgrade --install monitoring \
   --wait --timeout 15m --atomic
 
 # ----------------------------------------------------
-# 8️⃣ ELK STACK (YAML APPLY)
+# 8️⃣ Install ELK Stack (YAML)
 # ----------------------------------------------------
 echo "🚀 Applying ELK Stack manifests..."
 
 kubectl apply -f elk/namespace.yaml
-# kubectl apply -f storageclass-gp3.yaml
 kubectl apply -f elk/deployment-elasticsearch.yaml
 kubectl apply -f elk/svc-elasticsearch.yaml
 kubectl apply -f elk/deployment-kibana.yaml
@@ -107,28 +126,36 @@ kubectl apply -f elk/deployment-filebeat.yaml
 echo "✅ ELK manifests applied"
 
 # ----------------------------------------------------
-# 9️⃣ Final health checks
+# 9️⃣ Health Checks
 # ----------------------------------------------------
 wait_pods $NAMESPACE_ARGO
 wait_pods $NAMESPACE_MON
 wait_pods observability
 
 # ----------------------------------------------------
-# 🔟 Passwords
+# 🔟 Show Credentials
 # ----------------------------------------------------
 echo ""
-echo "🔐 ArgoCD Password:"
+echo "🔐 ArgoCD Admin Password:"
 kubectl -n argocd get secret argocd-initial-admin-secret \
   -o jsonpath="{.data.password}" | base64 -d
 echo ""
 
 echo ""
-echo "🔐 Grafana Password:"
+echo "🔐 Grafana Admin Password:"
 kubectl -n monitoring get secret monitoring-grafana \
   -o jsonpath="{.data.admin-password}" | base64 -d
 echo ""
 
+# ----------------------------------------------------
+# 1️⃣1️⃣ Show LoadBalancer URLs
+# ----------------------------------------------------
+print_loadbalancers
+
+# ----------------------------------------------------
+# ✅ Done
+# ----------------------------------------------------
 echo "===================================================="
-echo "✅ INSTALL COMPLETED"
+echo "✅ INSTALL COMPLETED SUCCESSFULLY"
 echo " ArgoCD + Prometheus + Grafana + ELK"
 echo "===================================================="
