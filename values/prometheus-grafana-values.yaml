@@ -1,0 +1,50 @@
+grafana:
+  service:
+    type: Loadbalancer
+  nodeSelector:
+    role: monitoring
+  tolerations:
+    - key: monitoring
+      operator: Equal
+      value: "true"
+      effect: NoSchedule
+
+prometheus:
+  service:
+    type: Loadbalancer
+  prometheusSpec:
+    nodeSelector:
+      role: monitoring
+    tolerations:
+      - key: monitoring
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
+
+alertmanager:
+  alertmanagerSpec:
+    nodeSelector:
+      role: monitoring
+    tolerations:
+      - key: monitoring
+        operator: Equal
+        value: "true"
+        effect: NoSchedule
+
+# ⭐ ADD THIS
+prometheusOperator:
+  nodeSelector:
+    role: monitoring
+  tolerations:
+    - key: monitoring
+      operator: Equal
+      value: "true"
+      effect: NoSchedule
+
+# ⭐ ADD THIS
+nodeExporter:
+  tolerations:
+    - key: monitoring
+      operator: Equal
+      value: "true"
+      effect: NoSchedule

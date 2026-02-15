@@ -1,0 +1,32 @@
+# ---------------------------------------------------
+# Global defaults (applies to all components)
+# ---------------------------------------------------
+global:
+  nodeSelector:
+    role: monitoring
+
+  tolerations:
+    - key: monitoring
+      operator: Equal
+      value: "true"
+      effect: NoSchedule
+
+# ---------------------------------------------------
+# ArgoCD Server
+# ---------------------------------------------------
+server:
+  service:
+    type: Loadbalancer
+
+# ---------------------------------------------------
+# Core Components
+# ---------------------------------------------------
+repoServer: {}
+controller: {}
+applicationSet: {}
+
+# ---------------------------------------------------
+# REQUIRED extras (production)
+# ---------------------------------------------------
+redis: {}
+dex: {}
