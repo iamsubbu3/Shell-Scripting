@@ -1,0 +1,69 @@
+# =====================================================
+# STAGE 1 — BUILD STAGE (Temporary)
+# Purpose:
+# - Install ALL dependencies (including dev)
+# - Build the application
+# =====================================================
+
+FROM node:20-alpine AS builder
+
+# 1️⃣ Set working directory inside container
+WORKDIR /app
+
+# 2️⃣ Copy dependency files first
+#    (enables Docker layer caching)
+COPY package*.json ./
+
+# 3️⃣ Install dependencies
+#    Includes dev deps needed for build
+RUN npm ci && npm cache clean --force
+
+# 4️⃣ Copy source code
+COPY . .
+
+# 5️⃣ Build the application
+#    Creates /app/dist
+#    Remove if plain Node.js app
+RUN npm run build
+
+
+
+# =====================================================
+# STAGE 2 — PRODUCTION STAGE (Final Image)
+# Purpose:
+# - Small, secure runtime image
+# - Only production dependencies
+# =====================================================
+
+FROM node:20-alpine
+
+# 1️⃣ Set working directory
+WORKDIR /app
+
+# 2️⃣ Create non-root user (Security Best Practice)
+RUN addgroup -S appgroup && adduser -S appuser -G appgroup
+
+# 3️⃣ Copy package files
+COPY package*.json ./
+
+# 4️⃣ Install ONLY production dependencies
+RUN npm ci --omit=dev && npm cache clean --force
+
+# 5️⃣ Copy built files from build stage
+COPY --from=builder /app/dist ./dist
+
+# 6️⃣ Change ownership to non-root user
+RUN chown -R appuser:appgroup /app
+
+# 7️⃣ Switch to non-root user
+USER appuser
+
+# 8️⃣ Expose application port
+EXPOSE 3000
+
+# 9️⃣ Health check (for Docker/Kubernetes)
+HEALTHCHECK --interval=30s --timeout=5s --retries=3 \
+  CMD wget -qO- http://localhost:3000/health || exit 1
+
+# 🔟 Start the application
+CMD ["node", "dist/server.js"]
